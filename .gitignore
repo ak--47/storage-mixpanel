@@ -1,0 +1,11 @@
+.DS_store
+.env
+node_modules
+environments/*
+!environments/.gitkeep
+logs/*
+!logs/.gitkeep
+tmp/*
+!tmp/.gitkeep
+notes.txt
+notes/*
