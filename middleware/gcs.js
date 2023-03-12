@@ -3,14 +3,14 @@ import parsers from '../components/parsers.js';
 import emitter from '../components/emitter.js';
 import csvMaker from '../components/csv.js';
 import u from 'ak-tools';
-import { Storage, TransferManager } from "@google-cloud/storage";
+import { Storage } from "@google-cloud/storage";
 import dayjs from "dayjs";
 import wcmatch from 'wildcard-match';
-import { resolve } from 'path';
+import { Readable } from 'stream';
 
 
 export default async function gcs(config, outStream) {
-	const { path, ...storageAuth } = config.storageAuth();
+	const { path, format, ...storageAuth } = config.storageAuth();
 
 	// * AUTH
 	let storage;
@@ -37,7 +37,7 @@ export default async function gcs(config, outStream) {
 
 	// ? https://googleapis.dev/nodejs/storage/latest/Storage.html
 
-	// list files in bucket + calc size
+	// * ENUMERATION
 	emitter.emit('cloud meta start', config);
 	const parsedUri = parseGCSUri(path);
 	const isMatch = wcmatch(parsedUri.file);
@@ -47,9 +47,14 @@ export default async function gcs(config, outStream) {
 	const fileNames = targetFiles.map(f => f.name);
 	const totalSize = targetFiles.map(f => Number(f.metadata.size)).reduce((t, i) => t + i);
 	config.store({ bytes: totalSize, files: fileNames });
-	const transfer = new TransferManager(bucket);
 	emitter.emit('cloud meta end', config);
 
+	// * VALIDATION
+	if (!targetFiles.length) {
+		throw new Error(`no files found matching:\n${path}... did you mean\n${path}*`);
+	}
+
+	// * TRANSFORMS
 	config.eventTimeTransform = (time) => {
 		if (isNaN(Number(time))) {
 			return dayjs(time).valueOf();
@@ -58,112 +63,37 @@ export default async function gcs(config, outStream) {
 			return Number(time);
 		}
 	};
-	config.timeTransform = (time) => { return dayjs(time.value).format('YYYY-MM-DDTHH:mm:ss'); };
+	config.timeTransform = (time) => { return dayjs(time).format('YYYY-MM-DDTHH:mm:ss'); };
+	const mpModel = transformer(config, config.mappings?.additional_time_keys);
 
-	const mpTransform = transformer(config, config.mappings?.additional_time_keys);
-
-
-	// download each file and transform/stream it
-
+	// * DOWNLOAD
+	emitter.emit('cloud download start', config);
+	const data = [];
+	// download each file; parse + transform it
 	for (const file of targetFiles) {
-		emitter.emit('cloud download start', config);
-		const parallel = u.timer('parallel');
-		parallel.start();
-		// await transfer.downloadFileInChunks(file, { destination: resolve(`./tmp/test.ndjson`), concurrencyLimit: 100 });
-		await file.download({ decompress: true, destination: resolve(`./tmp/test.ndjson`) });
-		// const data = chunks.map(c => c.toString()).join();
-		parallel.end();
-		emitter.emit('cloud download end', config);
-		debugger;
-
-		// await file
-		// 	.createReadStream({ decompress: true })
-		// 	.on('data', (blob) => {
-		// 		emitter.emit('storage batch', config, blob.length);
-		// 	})
-		// 	.pipe(parsers(config.format))
-		// 	.once('data', () => {
-		// 		emitter.emit('cloud download start', config);
-		// 	}) //stream is created
-		// 	.on('data', (record) => {
-		// 		outStream.push(mpTransform(record.value));
-		// 	})
-		// 	.on('finish', () => {
-		// 		emitter.emit('cloud download end', config);
-		// 		outStream.push(null);
-		// 	});
+		emitter.emit('file download start', config, file.name, file.metadata.size);
+		const [blob] = await file.download({ decompress: true });
+		emitter.emit('file download end', config, file.name, file.metadata.size);
+		data.push(parsers(format, blob).map(mpModel));
 	}
+	const records = data.flat();
+	const stream = new Readable.from(records, { objectMode: true });
+	config.store({ rows: records.length });
+	emitter.emit('cloud download end', config);
 
+	// * UPLOAD
+	return new Promise((resolve, reject) => {
+		stream
+			.on('data', (record) => {
+				outStream.push(record);
+			})
+			.on('error', reject)
+			.on('end', () => {
+				outStream.push(null);
+				resolve(config);
+			});
 
-
-
-	// const ex = await files[0].download({ decompress: true });
-
-
-	// bucket.getFilesStream()
-	// 	.on('error', console.error)
-	// 	.on('data', async function (file) {
-	// 		const [contents, bar] = await file.download()
-	// 		debugger;
-	// 		// file is a File object.
-	// 	})
-	// 	.on('end', function () {
-	// 		// All files retrieved.
-	// 	});
-
-
-	// const [job, jobMeta] = await storage.createQueryJob(options);
-	// const { datasetId, tableId } = jobMeta.configuration.query.destinationTable;
-
-	// return new Promise((resolve, reject) => {
-	// 	job.on('complete', async function (metadata) {
-	// 		config.store({ job: metadata });
-	// 		emitter.emit('dwh query end', config);
-
-	// 		// get temp table's metadata and schema + store it
-	// 		const [tableMeta] = await storage.dataset(datasetId).table(tableId).get();
-	// 		const { schema, ...tempTable } = tableMeta.metadata;
-	// 		config.store({ schema: schema.fields });
-	// 		config.store({ table: tempTable });
-	// 		config.store({ rows: Number(tempTable.numRows) });
-
-	// 		//model time transforms
-	// 		const dateFields = schema.fields
-	// 			.filter(f => ['DATETIME', 'DATE', 'TIMESTAMP', 'TIME']
-	// 				.includes(f.type))
-	// 			.map(f => f.name);
-
-	// 		config.eventTimeTransform = (time) => { return dayjs(time.value).valueOf(); };
-	// 		config.timeTransform = (time) => { return dayjs(time.value).format('YYYY-MM-DDTHH:mm:ss'); };
-	// 		const mpModel = transformer(config, dateFields);
-
-	// 		// tables cannot be streamed...they are returned as a CSV
-	// 		if (config.type === 'table') {
-	// 			emitter.emit('dwh query end', config);
-	// 			const [rows] = await storage.dataset(datasetId).table(tableId).getRows();
-	// 			const transformedRows = rows.map(mpModel);
-	// 			const csv = csvMaker(transformedRows);
-	// 			resolve(csv);
-	// 		}
-
-	// 		// stream results
-	// 		// ? https://stackoverflow.com/a/41169200 apparently this is faster?
-	// 		emitter.emit('dwh stream start', config);
-	// 		job
-	// 			.getQueryResultsStream({ highWaterMark: 2000 * config.options.workers, timeoutMs: 0 })
-	// 			.on("error", reject)
-	// 			.on("data", (row) => {
-	// 				outStream.push(mpModel(row));
-	// 			})
-	// 			.on("end", () => {
-	// 				emitter.emit('dwh stream end', config);
-	// 				outStream.push(null);
-	// 				resolve(config);
-	// 			});
-	// 	});
-
-
-	// });
+	});
 
 }
 

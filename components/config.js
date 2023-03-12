@@ -48,7 +48,7 @@ export default class storageConfig {
 	constructor(spec) {
 		this.storage = spec.storage?.toLowerCase() || ``;
 		this.format = spec.format?.toLowerCase() || 'ndjson';
-		this.path = spec.path || ``;		
+		this.path = spec.path || ``;
 		this.auth = spec.auth || {};
 
 		this.mappings = spec.mappings; //u.objDefault(spec.mappings || {}, defaultMappings);
@@ -56,8 +56,8 @@ export default class storageConfig {
 		this.mixpanel = u.objDefault(spec.mixpanel || {}, defaultMixpanel);
 		this.tags = spec.tags || {};
 
-		this.inBytes = 0;
-		this.outBytes = 0;
+		this.inCount = 0;
+		this.outCount = 0;
 
 		this.cloudStore = {};
 		this.mpStore = {};
@@ -66,6 +66,7 @@ export default class storageConfig {
 			meta: u.timer('meta'),
 			download: u.timer('download'),
 			upload: u.timer('upload'),
+			generic: u.timer('generic')
 		};
 
 		this.multiBar = new cliProgress.MultiBar({
@@ -165,11 +166,11 @@ export default class storageConfig {
 	}
 
 	got(num = 1) {
-		this.inBytes += num;
+		this.inCount += num;
 	}
 
 	sent(num) {
-		this.outBytes += num || 1;
+		this.outCount += num || 1;
 	}
 
 	store(data, where = 'storage') {
@@ -237,7 +238,7 @@ export default class storageConfig {
 				path: this.path,
 				format: this.format,
 
-					//required w/out ADV
+				//required w/out ADV
 				project_id: this.auth.project_id,
 				private_key: this.auth.private_key,
 				client_email: this.auth.client_email,

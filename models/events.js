@@ -8,7 +8,7 @@ export default function modelEvent(row, mappings, timeFields = [], eventTimeTran
 			distinct_id: row[distinct_id_col],
 			$insert_id: row[insert_id_col]?.toString(), //insert_ids are always strings
 			time: eventTimeTransform(row[time_col]),
-			$source: 'dwh-mixpanel'
+			$source: 'storage-mixpanel'
 		},
 	};
 	

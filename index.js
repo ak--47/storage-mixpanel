@@ -106,7 +106,7 @@ async function main(params) {
 	//* STORAGE STREAM
 	let cloudStorage;
 	try {
-		switch (config.storage) {			
+		switch (config.storage) {
 			case 'gcs':
 				cloudStorage = await gcs(config, mpStream);
 				break;
@@ -196,22 +196,37 @@ emitter.once('cloud meta end', (config) => {
 emitter.once('cloud download start', (config) => {
 	config.downloadTime.start();
 	if (config.verbose) {
-		u.cLog(c.magenta(`\ndownload start! (${config.cloudStore.bytes > 0 ? u.bytesHuman(config.cloudStore.bytes) : "unknown number of bytes"})\n`));
-		config.progress({ total: config.cloudStore.bytes, startValue: 0 });
+		u.cLog(c.magenta(`\n${config.storage} downloads starting! ${config.cloudStore.bytes > 0 ? u.bytesHuman(config.cloudStore.bytes) : "unknown number of bytes"} in ${config.cloudStore.files.length} files\n`));
 	}
 });
 
 emitter.once('cloud download end', (config) => {
 	config.downloadTime.end(false);
 	if (config.verbose) {
-		//noop
+		u.cLog(c.magenta(`\nall ${config.storage} downloads finished! (got ${u.comma(config.cloudStore.rows)} ${config.type}s in ${config.cloudStore.bytes > 0 ? u.bytesHuman(config.cloudStore.bytes) : "unknown number of bytes"})`));
+		u.cLog(c.magenta(`\t${config.storage} took ${config.downloadTime.report(false).human}\n`));
+	}
+});
+
+emitter.on('file download start', (config, name, size) => {
+	config.genericTimer = u.timer();
+	config.genericTimer.start();
+	if (config.verbose) {
+		u.cLog(c.green(`\tdownloading ${name} (${size > 0 ? u.bytesHuman(size) : "unknown number of bytes"}) ...`));
+	}
+});
+
+emitter.on('file download end', (config, name) => {
+	config.genericTimer.end(false);
+	if (config.verbose) {
+		u.cLog(c.green(`\t... ${name} complete in ${config.genericTimer.report(false).human}\n`));
 	}
 });
 
 emitter.once('mp upload start', (config) => {
 	config.uploadTime.start();
 	if (config.verbose) {
-		config.progress({ total: config.cloudStore.bytes, startValue: 0 }, 'mp');
+		config.progress({ total: config.cloudStore.rows, startValue: 0 }, 'mp');
 	}
 });
 
@@ -229,7 +244,7 @@ emitter.once('mp upload end', (config) => {
 		// u.cLog(`\tmixpanel took ${config.importTime.report(false).human}\n`);
 		u.cLog(c.magenta('\nupload ended!'));
 		u.cLog(c.red(`\nCOMPLETE!`));
-		u.cLog(c.yellow(`\tprocessed ${u.comma(summary.mixpanel.total)} ${config.type}s in ${summary.time.human}`));
+		u.cLog(c.yellow(`\tprocessed ${u.comma(summary.mixpanel.total)} ${config.type}s in ${summary.time.upload.human}`));
 		u.cLog(c.yellow(`\t(${successRate}% success rate; ~${u.comma(evPerSec)} EPS)`));
 		u.cLog(`\ncheck out your data!\n` + c.blue.underline(`https://mixpanel.com/project/${config.mpAuth().project}\n`));
 	}
