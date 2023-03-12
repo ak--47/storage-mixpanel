@@ -12,7 +12,7 @@
 		"retl",
 		"etl",
 		"gcs",
-		"s3",		
+		"s3",
 		"gcp",
 		"aws"
 	],
@@ -46,7 +46,8 @@
 		"mixpanel-import": "^2.2.53",
 		"p-event": "^5.0.1",
 		"papaparse": "^5.3.2",
-		"stream-json": "^1.7.5"
+		"stream-json": "^1.7.5",
+		"wildcard-match": "^5.1.2"
 	},
 	"type": "module",
 	"devDependencies": {

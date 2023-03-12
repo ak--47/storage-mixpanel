@@ -3,6 +3,7 @@ import dayjs from 'dayjs';
 import cliProgress from 'cli-progress';
 import colors from 'ansi-colors';
 import { createRequire } from "node:module";
+import transformer from "./transformer.js";
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line no-unused-vars
@@ -43,10 +44,11 @@ CONFIG
 ------
 */
 
-export default class dwhConfig {
+export default class storageConfig {
 	constructor(spec) {
-		this.dwh = spec.dwh || ``;
-		this.sql = spec.sql || ``;
+		this.storage = spec.storage?.toLowerCase() || ``;
+		this.format = spec.format?.toLowerCase() || 'ndjson';
+		this.path = spec.path || ``;		
 		this.auth = spec.auth || {};
 
 		this.mappings = spec.mappings; //u.objDefault(spec.mappings || {}, defaultMappings);
@@ -54,18 +56,16 @@ export default class dwhConfig {
 		this.mixpanel = u.objDefault(spec.mixpanel || {}, defaultMixpanel);
 		this.tags = spec.tags || {};
 
-		this.inCount = 0;
-		this.outCount = 0;
+		this.inBytes = 0;
+		this.outBytes = 0;
 
-		this.dwhStore = {};
+		this.cloudStore = {};
 		this.mpStore = {};
-		this.arbStore = {};
-		this.logStore = [];
 		this.timers = {
 			etl: u.timer('etl'),
-			query: u.timer('query'),
-			stream: u.timer('stream'),
-			import: u.timer('import')
+			meta: u.timer('meta'),
+			download: u.timer('download'),
+			upload: u.timer('upload'),
 		};
 
 		this.multiBar = new cliProgress.MultiBar({
@@ -81,25 +81,25 @@ export default class dwhConfig {
 
 	}
 
-	progress(createOrUpdate, type = 'dwh') {
+	progress(createOrUpdate, type = 'storage') {
 		if (this.verbose) {
 			//make labels the same padding
-			let dwhLabel = this.dwh;
+			let storageLabel = this.storage;
 			let mixpanelLabel = "mixpanel";
-			while (dwhLabel.length !== mixpanelLabel.length) {
-				if (dwhLabel.length > mixpanelLabel.length) {
+			while (storageLabel.length !== mixpanelLabel.length) {
+				if (storageLabel.length > mixpanelLabel.length) {
 					mixpanelLabel += " ";
 				}
 				else {
-					dwhLabel += " ";
+					storageLabel += " ";
 				}
 			}
 
 			if (typeof createOrUpdate === 'object') {
 				const { total, startValue } = createOrUpdate;
-				if (type === 'dwh') {
-					this.dwhProgress = this.multiBar.create(total, startValue, {}, {
-						format: `${dwhLabel} |` + colors.cyan('{bar}') + `| {value}/{total} ${this.type}s ` + colors.green('{percentage}%') + ` {duration_formatted} ETA: {eta_formatted}`,
+				if (type === 'storage') {
+					this.storageProgress = this.multiBar.create(total, startValue, {}, {
+						format: `${storageLabel} |` + colors.cyan('{bar}') + `| {value}/{total} bytes ` + colors.green('{percentage}%') + ` {duration_formatted} ETA: {eta_formatted}`,
 
 					});
 				}
@@ -113,8 +113,8 @@ export default class dwhConfig {
 
 
 			else if (typeof createOrUpdate === 'number') {
-				if (type === 'dwh') {
-					this.dwhProgress.increment(createOrUpdate);
+				if (type === 'storage') {
+					this.storageProgress.increment(createOrUpdate);
 				}
 				else if (type === 'mp') {
 					this.mpProgress.increment(createOrUpdate);
@@ -139,22 +139,18 @@ export default class dwhConfig {
 		return this.mixpanel.type.toLowerCase();
 	}
 
-	get warehouse() {
-		return this.dwh.toLowerCase();
-	}
-
 	get verbose() {
 		return this.options.verbose;
 	}
 
-	get queryTime() {
-		return this.timers.query;
+	get metaTime() {
+		return this.timers.meta;
 	}
-	get streamTime() {
-		return this.timers.stream;
+	get downloadTime() {
+		return this.timers.download;
 	}
-	get importTime() {
-		return this.timers.import;
+	get uploadTime() {
+		return this.timers.upload;
 	}
 	get etlTime() {
 		return this.timers.etl;
@@ -168,37 +164,33 @@ export default class dwhConfig {
 		return pretty ? u.comma(this.outCount) : this.outCount;
 	}
 
-	got() {
-		this.inCount++;
+	got(num = 1) {
+		this.inBytes += num;
 	}
 
 	sent(num) {
-		this.outCount += num || 1;
+		this.outBytes += num || 1;
 	}
 
-	store(data, where = 'dwh') {
-		if (where === 'dwh') {
-			this.dwhStore = u.objDefault(this.dwhStore, data);
+	store(data, where = 'storage') {
+		if (where === 'storage') {
+			this.cloudStore = u.objDefault(this.cloudStore, data);
 		}
 		else if (where === 'mp') {
 			this.mpStore = u.objDefault(this.mpStore, data);
 		}
-
-		else {
-			this.arbStore = u.objDefault(this.arbStore, data);
-		}
-	}
-
-	log(something) {
-		this.logStore.push(something);
 	}
 
 	summary() {
 		return {
 			mixpanel: this.mpStore,
-			[this.dwh]: this.dwhStore,
-			time: this.etlTime.report(false),
-			logs: this.logStore
+			[this.storage]: this.cloudStore,
+			time: {
+				job: this.etlTime.report(false),
+				enumeration: this.metaTime.report(false),
+				download: this.downloadTime.report(false),
+				upload: this.uploadTime.report(false)
+			}
 		};
 	}
 
@@ -216,109 +208,55 @@ export default class dwhConfig {
 
 	}
 
+	/** @returns {Types.ImportOptions} */
 	mpOpts() {
 		const mp = this.mixpanel;
-		/** @type {Types.Options} */
 		const opt = this.options;
+
 		return {
 			recordType: mp.type,
 			region: mp.region,
-			streamFormat: 'json',
+			streamFormat: 'jsonl',
 			compress: opt.compress,
 			strict: opt.strict,
 			logs: false,
 			fixData: false,
 			verbose: false,
 			workers: opt.workers,
+			forceStream: true,
 			recordsPerBatch: mp.type === 'group' ? 200 : 2000,
 			abridged: opt.abridged
 
 		};
 	}
 
-	dwhAuth() {
-		if (this.dwh === 'bigquery') {
+	storageAuth() {
+		if (this.storage === 'gcs') {
 			return {
-				type: this.auth.type,
+				//always required
+				path: this.path,
+				format: this.format,
+
+					//required w/out ADV
 				project_id: this.auth.project_id,
-				private_key_id: this.auth.private_key_id,
 				private_key: this.auth.private_key,
 				client_email: this.auth.client_email,
-				client_id: this.auth.client_id,
-				client_x509_cert_url: this.auth.client_x509_cert_url,
-				auth_uri: this.auth.auth_uri,
-				token_uri: this.auth.token_uri,
-				auth_provider_x509_cert_url: this.auth.auth_provider_x509_cert_url,
-				query: this.sql,
-				location: this.auth.location,
-			};
-		}
-		if (this.dwh === 'gcs') {
-			return {
-				type: this.auth.type,
-				project_id: this.auth.project_id,
-				private_key_id: this.auth.private_key_id,
-				private_key: this.auth.private_key,
-				client_email: this.auth.client_email,
-				client_id: this.auth.client_id,
-				client_x509_cert_url: this.auth.client_x509_cert_url,
-				auth_uri: this.auth.auth_uri,
-				token_uri: this.auth.token_uri,
-				auth_provider_x509_cert_url: this.auth.auth_provider_x509_cert_url,
-				query: this.sql,
-				location: this.auth.location,
-			};
-		}
-		if (this.dwh === 'snowflake') {
-			return {
-				account: this.auth.account,
-				username: this.auth.username,
-				password: this.auth.password,
-				database: this.auth.database,
-				schema: this.auth.schema,
-				warehouse: this.auth.warehouse,
-				query: this.sql
-			};
-		}
+				//opt				
+				type: this.auth?.type,
+				private_key_id: this.auth?.private_key_id,
+				client_id: this.auth?.client_id,
+				client_x509_cert_url: this.auth?.client_x509_cert_url,
+				auth_uri: this.auth?.auth_uri,
+				token_uri: this.auth?.token_uri,
+				auth_provider_x509_cert_url: this.auth?.auth_provider_x509_cert_url,
 
-		if (this.dwh === 'athena') {
-			return {
-				accessKeyId: this.auth.accessKeyId,
-				secretAccessKey: this.auth.secretAccessKey,
-				region: this.auth.region,
-				query: this.sql
-			};
-		}
 
-		if (this.dwh === 'azure') {
-			return {
-				query: this.sql,
-				connectionString: this.auth.connection_string,
-				user: this.auth.user,
-				password: this.auth.password,
-				server: this.auth.server,
-				port: this.auth.port,
-				domain: this.auth.domain,
-				database: this.auth.database
-
-			};
-		}
-
-		if (this.dwh === 'salesforce') {
-			return {
-				query: this.sql,
-				user: this.auth.user,
-				password: this.auth.password,
-				version: this.auth.version?.toString() || "51.0",
-				prettyLabels: u.isNil(this.auth.resolve_field_names) ? true : this.auth.resolve_field_names,
-				renameId: u.isNil(this.auth.rename_primary_id) ? true : this.auth.rename_primary_id,
-				addUrls: u.isNil(this.auth.add_sfdc_links) ? true : this.auth.add_sfdc_links
 			};
 		}
 
 		else {
 			return {
-				query: this.sql,
+				path: this.path,
 				...this.auth
 			};
 		}

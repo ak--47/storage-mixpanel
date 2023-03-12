@@ -75,12 +75,12 @@ async function main(params) {
 
 	if (config.verbose) u.cLog(c.red('\nSTART!'));
 
-	const { type, version, warehouse } = config;
-	const props = { runId, type, version, warehouse };
+	const { type, version, storage } = config;
+	const props = { runId, type, version, storage };
 	try {
 		config.validate();
 		props.type = config.type;
-		props.warehouse = config.warehouse;
+		props.storage = config.storage;
 		props.version = config.version;
 		track('valid', props);
 	}
@@ -103,29 +103,29 @@ async function main(params) {
 	//* MIXPANEL STREAM
 	const mpStream = createStream(config);
 
-	//* DWH STREAM
+	//* STORAGE STREAM
 	let cloudStorage;
 	try {
-		switch (config.warehouse) {			
+		switch (config.storage) {			
 			case 'gcs':
 				cloudStorage = await gcs(config, mpStream);
 				break;
 			default:
-				if (config.verbose) u.cLog(`i do not know how to access ${config.warehouse}... sorry`);
+				if (config.verbose) u.cLog(`i do not know how to access ${config.storage}... sorry`);
 				mpStream.destroy();
-				track('unsupported warehouse', props);
-				throw new Error('unsupported warehouse', { cause: config.warehouse, config });
+				track('unsupported storage', props);
+				throw new Error('unsupported storage', { cause: config.storage, config });
 		}
 	}
 
 	catch (e) {
-		track('warehouse error', { ...props, msg: e.message });
+		track('storage error', { ...props, msg: e.message });
 		if (config.verbose) {
-			console.log(c.redBright.bold(`\n${config.warehouse.toUpperCase()} ERROR:`));
+			console.log(c.redBright.bold(`\n${config.storage.toUpperCase()} ERROR:`));
 			console.log(c.redBright.bold(e.message));
 		}
 		else {
-			u.cLog(e, `${config.warehouse} error: ${e.message}`, `CRITICAL`);
+			u.cLog(e, `${config.storage} error: ${e.message}`, `CRITICAL`);
 		}
 		mpStream.destroy();
 		throw e;
@@ -134,16 +134,16 @@ async function main(params) {
 	// ? SPECIAL CASE: lookup tables cannot be streamed as batches
 	if (config.type === 'table') {
 		mpStream.destroy();
-		emitter.emit('mp import start', config);
+		emitter.emit('mp upload start', config);
 		const tableImport = await mp(config.mpAuth(), cloudStorage, { ...config.mpOpts(), logs: false });
 		config.store(tableImport, 'mp');
-		emitter.emit('mp import end', config);
+		emitter.emit('mp upload end', config);
 	}
 
 	else {
 		// * WAIT
 		try {
-			await pEvent(emitter, 'mp import end');
+			await pEvent(emitter, 'mp upload end');
 			mpStream.destroy();
 		} catch (e) {
 			u.cLog(e, c.red('UNKNOWN FAILURE'), 'CRITICAL');
@@ -179,58 +179,55 @@ LISTENERS
 ---------
 */
 
-emitter.once('dwh query start', (config) => {
-	config.queryTime.start();
-	if (config.verbose) u.cLog(c.cyan(`\n${config.dwh} query start`));
+emitter.once('cloud meta start', (config) => {
+	config.metaTime.start();
+	if (config.verbose) u.cLog(c.cyan(`\nenumerating ${config.storage}`));
 
 });
 
-emitter.once('dwh query end', (config) => {
-	config.queryTime.end(false);
+emitter.once('cloud meta end', (config) => {
+	config.metaTime.end(false);
 	if (config.verbose) {
-		u.cLog(c.cyan(`${config.dwh} query end`));
-		u.cLog(c.cyan(`\t${config.warehouse} took ${config.queryTime.report(false).human}\n`));
+		u.cLog(c.cyan(`${config.storage} enumeration complete`));
+		u.cLog(c.cyan(`\t${config.storage} took ${config.metaTime.report(false).human}\n`));
 	}
 });
 
-emitter.once('dwh stream start', (config) => {
-	config.streamTime.start();
+emitter.once('cloud download start', (config) => {
+	config.downloadTime.start();
 	if (config.verbose) {
-		// u.cLog(`\n${config.dwh} stream start`);
-		u.cLog(c.magenta(`\nstreaming started! (${config.dwhStore.rows > 0 ? u.comma(config.dwhStore.rows) : "unknown number of"} ${config.type}s)\n`));
-		config.progress({ total: config.dwhStore.rows, startValue: 0 });
+		u.cLog(c.magenta(`\ndownload start! (${config.cloudStore.bytes > 0 ? u.bytesHuman(config.cloudStore.bytes) : "unknown number of bytes"})\n`));
+		config.progress({ total: config.cloudStore.bytes, startValue: 0 });
 	}
 });
 
-emitter.once('dwh stream end', (config) => {
-	config.streamTime.end(false);
+emitter.once('cloud download end', (config) => {
+	config.downloadTime.end(false);
 	if (config.verbose) {
-		// u.cLog(`${config.dwh} stream end`);
-		// u.cLog(`\t${config.warehouse} took ${config.streamTime.report(false).human}\n`);
+		//noop
 	}
 });
 
-emitter.once('mp import start', (config) => {
-	config.importTime.start();
+emitter.once('mp upload start', (config) => {
+	config.uploadTime.start();
 	if (config.verbose) {
-		// u.cLog(`\nmixpanel import start`);
-		config.progress({ total: config.dwhStore.rows, startValue: 0 }, 'mp');
+		config.progress({ total: config.cloudStore.bytes, startValue: 0 }, 'mp');
 	}
 });
 
-emitter.once('mp import end', (config) => {
-	config.importTime.end(false);
+emitter.once('mp upload end', (config) => {
+	config.uploadTime.end(false);
 	config.etlTime.end(false);
 	const summary = config.summary();
 	const successRate = u.round(summary.mixpanel.success / summary.mixpanel.total * 100, 2);
-	const importTime = config.importTime.report(false).delta;
+	const importTime = config.uploadTime.report(false).delta;
 	const evPerSec = Math.floor((config.inCount / importTime) * 1000);
 
 	if (config.verbose) {
 		config.progress(); //stop progress bars
 		// u.cLog(`\nmixpanel import end`);
 		// u.cLog(`\tmixpanel took ${config.importTime.report(false).human}\n`);
-		u.cLog(c.magenta('\nstreaming ended!'));
+		u.cLog(c.magenta('\nupload ended!'));
 		u.cLog(c.red(`\nCOMPLETE!`));
 		u.cLog(c.yellow(`\tprocessed ${u.comma(summary.mixpanel.total)} ${config.type}s in ${summary.time.human}`));
 		u.cLog(c.yellow(`\t(${successRate}% success rate; ~${u.comma(evPerSec)} EPS)`));
@@ -238,10 +235,10 @@ emitter.once('mp import end', (config) => {
 	}
 });
 
-emitter.on('dwh batch', (config) => {
+emitter.on('storage batch', (config, bytes = 1) => {
 	if (config.verbose) {
 		try {
-			config.progress(1, 'dwh');
+			config.progress(bytes, 'storage');
 		}
 		catch (e) {
 			//noop

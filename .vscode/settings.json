@@ -39,6 +39,7 @@
 		"transactsql",
 		"unparse",
 		"WALKTHOUGH",
-		"walkthrough"
+		"walkthrough",
+		"wcmatch"
 	]
 }

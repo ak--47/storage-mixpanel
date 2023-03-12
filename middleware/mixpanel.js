@@ -23,13 +23,13 @@ export default function createStream(config, cb = () => { }) {
 			config.store(results, 'mp');
 			cb(results);
 		}
-		emitter.emit('mp import end', config);
+		emitter.emit('mp upload end', config);
 	});
 
 	inStream.pipe(outStream);
 
 	inStream.on("error", (err) => {
-		if (config.verbose) u.cLog(err, 'dwh fail', 'ERROR');
+		if (config.verbose) u.cLog(err, 'storage fail', 'ERROR');
 		config.log(err);
 	});
 
@@ -39,12 +39,12 @@ export default function createStream(config, cb = () => { }) {
 	});
 
 	outStream.once('data', () => {
-		emitter.emit('mp import start', config);
+		emitter.emit('mp upload start', config);
 	});
 
 	inStream.on('data', () => {
 		config.got();
-		emitter.emit('dwh batch', config);
+		// emitter.emit('storage batch', config);
 	});
 
 	outStream.on("data", (resp) => {

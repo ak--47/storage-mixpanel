@@ -1,37 +1,27 @@
 import transformer from '../components/transformer.js';
+import parsers from '../components/parsers.js';
 import emitter from '../components/emitter.js';
 import csvMaker from '../components/csv.js';
 import u from 'ak-tools';
 import { Storage } from "@google-cloud/storage";
-// import { auth } from 'google-auth-library';
 import dayjs from "dayjs";
+import wcmatch from 'wildcard-match';
 
 
-export default async function bigquery(config, outStream) {
-	const { location, query, ...dwhAuth } = config.dwhAuth();
-	// todo support other auth types: 
-	// ? https://cloud.google.com/nodejs/docs/reference/google-auth-library/latest
-	// let googAuth;
-	// try {
-	// 	// eslint-disable-next-line no-unused-vars
-	// 	googAuth = auth.fromJSON(dwhAuth);
-	// }
-	// catch (e) {
-	// 	//noop
-	// 	// todo use this:
-	// 	googAuth = await auth.getApplicationDefault()
-	// }
+
+export default async function gcs(config, outStream) {
+	const { path, ...storageAuth } = config.storageAuth();
 
 	// * AUTH
 	let storage;
-	if (dwhAuth.project_id && dwhAuth.client_email && dwhAuth.private_key) {
+	if (storageAuth.project_id && storageAuth.client_email && storageAuth.private_key) {
 		// ! SERVICE ACCT AUTH
 		// ? https://cloud.google.com/bigquery/docs/authentication/service-account-file
 		storage = new Storage({
-			projectId: dwhAuth.project_id,
+			projectId: storageAuth.project_id,
 			credentials: {
-				client_email: dwhAuth.client_email,
-				private_key: dwhAuth.private_key
+				client_email: storageAuth.client_email,
+				private_key: storageAuth.private_key
 			}
 		});
 		if (config.verbose) u.cLog('\tusing service account credentials');
@@ -45,39 +35,59 @@ export default async function bigquery(config, outStream) {
 		if (config.verbose) u.cLog('\tattempting to use application default credentials');
 	}
 
-	// // note: location must match that of the dataset(s) referenced in the query.
-	// /** @type {import("BigQuery")} */
-	// const options = {
-	// 	query,
-	// 	location,
-	// 	jobTimeoutMs: 1000 * 60 * 60 * 60 // ! todo: think about this
-	// };
+	// ? https://googleapis.dev/nodejs/storage/latest/Storage.html
 
 	// list files in bucket + calc size
-	emitter.emit('dwh query start', config);
-	const bucketName = query.replace("gs://", "").split("/")[0];
-	const bucket = storage.bucket(bucketName);
-	const [files] = await bucket.getFiles();
-	const fileNames = files.map(f => f.name);
-	const totalSize = files.map(f => Number(f.metadata.size)).reduce((t, i) => t + i);
-	config.store({ rows: totalSize, files: fileNames });
-	emitter.emit('dwh query end', config);
+	emitter.emit('cloud meta start', config);
+	const parsedUri = parseGCSUri(path);
+	const isMatch = wcmatch(parsedUri.file);
+	const bucket = storage.bucket(parsedUri.bucket);
+	const [allFiles] = await bucket.getFiles();
+	const targetFiles = allFiles.filter(f => isMatch(f.name));
+	const fileNames = targetFiles.map(f => f.name);
+	const totalSize = targetFiles.map(f => Number(f.metadata.size)).reduce((t, i) => t + i);
+	config.store({ bytes: totalSize, files: fileNames });
+	emitter.emit('cloud meta end', config);
+
+	config.eventTimeTransform = (time) => {
+		if (isNaN(Number(time))) {
+			return dayjs(time).valueOf();
+		}
+		else {
+			return Number(time);
+		}
+	};
+	config.timeTransform = (time) => { return dayjs(time.value).format('YYYY-MM-DDTHH:mm:ss'); };
+
+	const mpTransform = transformer(config, config.mappings?.additional_time_keys);
 
 
-	await files[0]
-    .createReadStream({decompress: true}) //stream is created
-	.on('data', (foo, bar, baz) => {
-		debugger;
-	})
-	.on('response', (foo, bar, baz) => {
-		debugger;
-	})
-    .on('finish', () => {
-      // The file download is complete
-    });
+	// download each file and transform/stream it
+
+	for (const file of targetFiles) {
+		await file
+			.createReadStream({ decompress: true })
+			.on('data', (blob) => {
+				emitter.emit('storage batch', config, blob.length);
+			})
+			.pipe(parsers(config.format))
+			.once('data', () => {
+				emitter.emit('cloud download start', config);
+			}) //stream is created
+			.on('data', (record) => {
+				outStream.push(mpTransform(record.value));
+			})
+			.on('finish', () => {
+				emitter.emit('cloud download end', config);
+				outStream.push(null);
+			});
+	}
+
+
+
 
 	// const ex = await files[0].download({ decompress: true });
-	debugger;
+
 
 	// bucket.getFilesStream()
 	// 	.on('error', console.error)
@@ -143,5 +153,19 @@ export default async function bigquery(config, outStream) {
 
 
 	// });
+
+}
+
+
+function parseGCSUri(uri) {
+	// ? https://www.npmjs.com/package/google-cloud-storage-uri-parser
+	const REG_EXP = new RegExp("^gs://([^/]+)/(.+)$");
+	const bucket = uri.replace(REG_EXP, "$1");
+	const file = uri.replace(REG_EXP, "$2");
+	return {
+		uri,
+		bucket,
+		file
+	};
 
 }

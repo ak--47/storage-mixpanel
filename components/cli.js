@@ -1,8 +1,6 @@
 import env from './env.js';
 import Config from "./config.js";
 import inquirer from 'inquirer';
-import sqlParse from 'node-sql-parser';
-import soqlParse from 'soql-parser-js';
 import u from 'ak-tools';
 import box from 'cli-box';
 import { writeFileSync } from 'fs';
