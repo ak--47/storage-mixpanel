@@ -196,14 +196,14 @@ emitter.once('cloud meta end', (config) => {
 emitter.once('cloud download start', (config) => {
 	config.downloadTime.start();
 	if (config.verbose) {
-		u.cLog(c.yellow(`\n${config.storage} downloads starting! ${config.cloudStore.bytes > 0 ? u.bytesHuman(config.cloudStore.bytes) : "unknown number of bytes"} in ${config.cloudStore.files.length} files\n`));
+		u.cLog(c.yellow(`\n${config.storage} downloads starting! ${config.cloudStore.bytes > 0 ? u.bytesHuman(config.cloudStore.bytes, 2, true) : "unknown number of bytes"} in ${config.cloudStore.files.length} files\n`));
 	}
 });
 
 emitter.once('cloud download end', (config) => {
 	config.downloadTime.end(false);
 	if (config.verbose) {
-		u.cLog(c.yellow(`\nall ${config.storage} downloads finished! (got ${u.comma(config.cloudStore.rows)} ${config.type}s in ${config.cloudStore.bytes > 0 ? u.bytesHuman(config.cloudStore.bytes) : "unknown number of bytes"})`));
+		u.cLog(c.yellow(`\nall ${config.storage} downloads finished! (got ${u.comma(config.cloudStore.rows)} ${config.type}s in ${config.cloudStore.bytes > 0 ? u.bytesHuman(config.cloudStore.bytes, 2, true) : "unknown number of bytes"})`));
 		u.cLog(c.yellow(`\t${config.storage} took ${config.downloadTime.report(false).human}\n`));
 	}
 });
@@ -212,14 +212,15 @@ emitter.on('file download start', (config, name, size) => {
 	config.genericTimer = u.timer();
 	config.genericTimer.start();
 	if (config.verbose) {
-		u.cLog(c.green(`\tdownloading ${name} (${size > 0 ? u.bytesHuman(size) : "unknown number of bytes"}) ...`));
+		u.cLog(c.green(`\tdownloading ${name} (${size > 0 ? u.bytesHuman(size, 2, true) : "unknown number of bytes"}) ...`));
 	}
 });
 
-emitter.on('file download end', (config, name) => {
+emitter.on('file download end', (config, name, size) => {
 	config.genericTimer.end(false);
+	const speed = u.bytesHuman((Number(size) / config.genericTimer.report(false).delta) * 1000);
 	if (config.verbose) {
-		u.cLog(c.green(`\t... ${name} complete in ${config.genericTimer.report(false).human}\n`));
+		u.cLog(c.green(`\t... ${name} complete in ${config.genericTimer.report(false).human} (${speed} per sec)\n`));
 	}
 });
 

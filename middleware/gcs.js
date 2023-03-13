@@ -56,6 +56,7 @@ export default async function gcs(config, outStream) {
 		throw new Error(`no files found matching:\n${path}... did you mean\n${path}*`);
 	}
 
+
 	// * TRANSFORMS
 	config.eventTimeTransform = (time) => {
 		if (isNaN(Number(time))) {
@@ -74,6 +75,12 @@ export default async function gcs(config, outStream) {
 	// download each file; parse + transform it
 	for (const file of targetFiles) {
 		emitter.emit('file download start', config, file.name, file.metadata.size);
+		// todo
+		// file.interceptors.push({
+		// 	request: function (reqOpts) {
+		// 		reqOpts.
+		// 	}
+		// });
 		const [blob] = await file.download({ decompress: true });
 		emitter.emit('file download end', config, file.name, file.metadata.size);
 		const records = (parsers(format, blob).map(mpModel));
