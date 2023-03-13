@@ -30,7 +30,7 @@ export default function createStream(config, cb = () => { }) {
 
 	inStream.on("error", (err) => {
 		if (config.verbose) u.cLog(err, 'storage fail', 'ERROR');
-		config.log(err);
+		// config.log(err);
 	});
 
 	outStream.on("error", (err) => {

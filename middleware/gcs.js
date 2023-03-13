@@ -7,6 +7,7 @@ import { Storage } from "@google-cloud/storage";
 import dayjs from "dayjs";
 import wcmatch from 'wildcard-match';
 import { Readable } from 'stream';
+import { pEvent } from 'p-event';
 
 
 export default async function gcs(config, outStream) {
@@ -37,6 +38,7 @@ export default async function gcs(config, outStream) {
 
 	// ? https://googleapis.dev/nodejs/storage/latest/Storage.html
 
+
 	// * ENUMERATION
 	emitter.emit('cloud meta start', config);
 	const parsedUri = parseGCSUri(path);
@@ -66,34 +68,42 @@ export default async function gcs(config, outStream) {
 	config.timeTransform = (time) => { return dayjs(time).format('YYYY-MM-DDTHH:mm:ss'); };
 	const mpModel = transformer(config, config.mappings?.additional_time_keys);
 
-	// * DOWNLOAD
+	// * DOWNLOAD	
 	emitter.emit('cloud download start', config);
-	const data = [];
+	let filesFinished = 0;
 	// download each file; parse + transform it
 	for (const file of targetFiles) {
 		emitter.emit('file download start', config, file.name, file.metadata.size);
 		const [blob] = await file.download({ decompress: true });
 		emitter.emit('file download end', config, file.name, file.metadata.size);
-		data.push(parsers(format, blob).map(mpModel));
-	}
-	const records = data.flat();
-	const stream = new Readable.from(records, { objectMode: true });
-	config.store({ rows: records.length });
-	emitter.emit('cloud download end', config);
-
-	// * UPLOAD
-	return new Promise((resolve, reject) => {
+		const records = (parsers(format, blob).map(mpModel));
+		const stream = new Readable.from(records, { objectMode: true });
 		stream
+			.once('data', () => {
+				emitter.emit('record stream start');
+			})
 			.on('data', (record) => {
 				outStream.push(record);
 			})
-			.on('error', reject)
+			.on('error', (e) => {
+				throw e;
+			})
 			.on('end', () => {
-				outStream.push(null);
-				resolve(config);
+				filesFinished++;
+				emitter.emit('record stream done', filesFinished);
 			});
+	}
+
+	// holder yer horses
+	await pEvent(emitter, 'record stream done', {
+		filter: () => {
+			return filesFinished === targetFiles.length;
+		},
 
 	});
+	outStream.push(null);
+	return config;
+
 
 }
 
