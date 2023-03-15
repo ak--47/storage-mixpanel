@@ -52,6 +52,7 @@ JSDOC TYPINGS
  * @prop {boolean} verbose display verbose console output
  * @prop {boolean} strict use strict mode when sending data to mixpanel
  * @prop {boolean} compress compress data in transit
+ * @prop {boolean} deleteFiles delete files in cloud storage after they are ingested
  * @prop {Number} workers number of concurrent workers to make requests to mixpanel
  */
 

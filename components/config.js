@@ -1,9 +1,6 @@
 import * as u from 'ak-tools';
 import dayjs from 'dayjs';
-import cliProgress from 'cli-progress';
-import colors from 'ansi-colors';
 import { createRequire } from "node:module";
-import transformer from "./transformer.js";
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line no-unused-vars
@@ -29,7 +26,8 @@ const defaultImportOptions = {
 	compress: true,
 	verbose: true,
 	workers: 10,
-	abridged: true
+	deleteFiles: false
+
 
 };
 
@@ -69,64 +67,8 @@ export default class storageConfig {
 			generic: u.timer('generic')
 		};
 
-		this.multiBar = new cliProgress.MultiBar({
-			clearOnComplete: false,
-			hideCursor: true,
-			fps: 50,
-			barsize: 60,
-			autopadding: true,
-			etaBuffer: 100
-		}, cliProgress.Presets.rect);
-
 		this.version = this.getVersion();
 
-	}
-
-	progress(createOrUpdate, type = 'storage') {
-		if (this.verbose) {
-			//make labels the same padding
-			let storageLabel = this.storage;
-			let mixpanelLabel = "mixpanel";
-			while (storageLabel.length !== mixpanelLabel.length) {
-				if (storageLabel.length > mixpanelLabel.length) {
-					mixpanelLabel += " ";
-				}
-				else {
-					storageLabel += " ";
-				}
-			}
-
-			if (typeof createOrUpdate === 'object') {
-				const { total, startValue } = createOrUpdate;
-				if (type === 'storage') {
-					this.storageProgress = this.multiBar.create(total, startValue, {}, {
-						format: `${storageLabel} |` + colors.cyan('{bar}') + `| {value}/{total} bytes ` + colors.green('{percentage}%') + ` {duration_formatted} ETA: {eta_formatted}`,
-
-					});
-				}
-				else if (type === 'mp') {
-					this.mpProgress = this.multiBar.create(total, startValue, {}, {
-						format: `${mixpanelLabel} |` + colors.magenta('{bar}') + `| {value}/{total} ${this.type}s ` + colors.green('{percentage}%') + ` {duration_formatted} ETA: {eta_formatted}`
-
-					});
-				};
-			}
-
-
-			else if (typeof createOrUpdate === 'number') {
-				if (type === 'storage') {
-					this.storageProgress.increment(createOrUpdate);
-				}
-				else if (type === 'mp') {
-					this.mpProgress.increment(createOrUpdate);
-				}
-			}
-
-
-			else {
-				this.multiBar.stop();
-			}
-		}
 	}
 
 	getVersion() {
@@ -231,12 +173,13 @@ export default class storageConfig {
 		};
 	}
 
-	storageAuth() {
+	storageConfig() {
 		if (this.storage === 'gcs') {
 			return {
 				//always required
 				path: this.path,
 				format: this.format,
+				deleteFiles: this.options.deleteFiles || false,
 
 				//required w/out ADV
 				project_id: this.auth.project_id,

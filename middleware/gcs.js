@@ -11,7 +11,7 @@ import { pEvent } from 'p-event';
 
 
 export default async function gcs(config, outStream) {
-	const { path, format, ...storageAuth } = config.storageAuth();
+	const { path, format, deleteFiles, ...storageAuth } = config.storageConfig();
 
 	// * AUTH
 	let storage;
@@ -46,6 +46,7 @@ export default async function gcs(config, outStream) {
 	const bucket = storage.bucket(parsedUri.bucket);
 	const [allFiles] = await bucket.getFiles();
 	const targetFiles = allFiles.filter(f => isMatch(f.name)).filter(f => Number(f.metadata.size) > 0);
+	if (!targetFiles.length) throw new Error(`no files found matching ${path} for format: ${format}`);
 	const fileNames = targetFiles.map(f => f.name);
 	const totalSize = targetFiles.map(f => Number(f.metadata.size)).reduce((t, i) => t + i);
 	config.store({ bytes: totalSize, files: fileNames });
@@ -75,15 +76,10 @@ export default async function gcs(config, outStream) {
 	// download each file; parse + transform it
 	for (const file of targetFiles) {
 		emitter.emit('file download start', config, file.name, file.metadata.size);
-		// todo
-		// file.interceptors.push({
-		// 	request: function (reqOpts) {
-		// 		reqOpts.
-		// 	}
-		// });
 		const [blob] = await file.download({ decompress: true });
 		emitter.emit('file download end', config, file.name, file.metadata.size);
-		const records = (parsers(format, blob).map(mpModel));
+		const parsed = parsers(format, blob);
+		const records = parsed.map(mpModel);
 		const stream = new Readable.from(records, { objectMode: true });
 		stream
 			.once('data', () => {
@@ -108,10 +104,19 @@ export default async function gcs(config, outStream) {
 		},
 
 	});
+
+	if (deleteFiles) {
+		const deletedFiles = [];
+		for (const file of targetFiles) {
+			emitter.emit('file delete start', config, file.name, file.metadata.size);
+			const [res] = await file.delete({ ignoreNotFound: true });
+			deletedFiles.push({ [file.name]: res?.toJSON()?.headers });
+			emitter.emit('file delete end', config, file.name, file.metadata.size);
+		}
+		config.store({ deletedFiles });
+	}
 	outStream.push(null);
 	return config;
-
-
 }
 
 

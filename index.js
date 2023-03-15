@@ -224,11 +224,23 @@ emitter.on('file download end', (config, name, size) => {
 	}
 });
 
+
+emitter.on('file delete start', (config, name, size) => {
+	if (config.verbose) {
+		u.cLog(c.green(`\tdeleting ${name} (${size > 0 ? u.bytesHuman(size, 2, true) : "unknown number of bytes"}) ...`));
+	}
+});
+
+emitter.on('file delete end', (config, name) => {
+	if (config.verbose) {
+		u.cLog(c.green(`\t... ${name} deleted!`));
+	}
+});
+
 emitter.once('mp upload start', (config) => {
 	config.uploadTime.start();
 	if (config.verbose) {
-		u.cLog(c.magenta('\nupload started!'));
-		config.progress({ total: config.cloudStore.rows, startValue: 0 }, 'mp');
+		u.cLog(c.magenta('\nmixpanel upload started!'));
 	}
 });
 
@@ -241,21 +253,18 @@ emitter.once('mp upload end', (config) => {
 	const evPerSec = Math.floor((config.inCount / importTime) * 1000);
 
 	if (config.verbose) {
-		config.progress(); //stop progress bars
-		// u.cLog(`\nmixpanel import end`);
-		// u.cLog(`\tmixpanel took ${config.importTime.report(false).human}\n`);
-		u.cLog(c.magenta('\nupload ended!'));
-		u.cLog(c.red(`\nCOMPLETE!`));
-		u.cLog(c.red(`\tprocessed ${u.comma(summary.mixpanel.total)} ${config.type}s in ${summary.time.upload.human}`));
+		u.cLog(c.magenta(`\nmixpanel upload ended! took ${config.uploadTime.report(false).human}`));
+		u.cLog(c.red(`\nJOB COMPLETE!`));
+		u.cLog(c.red(`\tprocessed ${u.comma(summary.mixpanel.total)} ${config.type}s in ${summary.time.job.human}`));
 		u.cLog(c.red(`\t(${successRate}% success rate; ~${u.comma(evPerSec)} EPS)`));
 		u.cLog(`\ncheck out your data!\n` + c.blue.underline(`https://mixpanel.com/project/${config.mpAuth().project}\n`));
 	}
 });
 
-emitter.on('storage batch', (config, bytes = 1) => {
+emitter.on('storage batch', (config) => {
 	if (config.verbose) {
 		try {
-			config.progress(bytes, 'storage');
+			//noop
 		}
 		catch (e) {
 			//noop
@@ -263,10 +272,10 @@ emitter.on('storage batch', (config, bytes = 1) => {
 	}
 });
 
-emitter.on('mp batch', (config, numImported) => {
+emitter.on('mp batch', (config) => {
 	if (config.verbose) {
 		try {
-			config.progress(numImported, 'mp');
+			u.progress('\t' + (config.mixpanel.type || `event`) + 's', config.outCount, `imported`);
 		}
 		catch (e) {
 			//noop
