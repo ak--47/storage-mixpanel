@@ -7,8 +7,7 @@ export default function gatherCliParams() {
 		MP_SERVICE_SECRET,
 		MP_TOKEN,
 		MP_PROJECT,
-		MP_LOOKUP_TABLE,
-		DWH_AUTH } = process.env;
+		STORAGE_AUTH } = process.env;
 
 	const valuesFound = {
 		mixpanel: {}
@@ -19,12 +18,11 @@ export default function gatherCliParams() {
 	if (MP_SERVICE_SECRET) valuesFound.mixpanel.service_secret = MP_SERVICE_SECRET;
 	if (MP_TOKEN) valuesFound.mixpanel.token = MP_TOKEN;
 	if (MP_PROJECT) valuesFound.mixpanel.project_id = MP_PROJECT;
-	if (MP_LOOKUP_TABLE) valuesFound.mixpanel.lookupTableId = MP_LOOKUP_TABLE;
 
-	if (DWH_AUTH) {
+	if (STORAGE_AUTH) {
 		try {
-			const dwhAuth = JSON.parse(DWH_AUTH);
-			valuesFound.auth = dwhAuth;
+			const storageAuth = JSON.parse(STORAGE_AUTH);
+			valuesFound.auth = storageAuth;
 		}
 
 		catch (e) {

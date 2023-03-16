@@ -1,7 +1,6 @@
 import transformer from '../components/transformer.js';
 import parsers from '../components/parsers.js';
 import emitter from '../components/emitter.js';
-import csvMaker from '../components/csv.js';
 import u from 'ak-tools';
 import { Storage } from "@google-cloud/storage";
 import dayjs from "dayjs";
@@ -78,7 +77,7 @@ export default async function gcs(config, outStream) {
 		emitter.emit('file download start', config, file.name, file.metadata.size);
 		const [blob] = await file.download({ decompress: true });
 		emitter.emit('file download end', config, file.name, file.metadata.size);
-		const parsed = parsers(format, blob);
+		const parsed = parsers(format, blob, file.name);
 		const records = parsed.map(mpModel);
 		const stream = new Readable.from(records, { objectMode: true });
 		stream

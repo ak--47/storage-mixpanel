@@ -9,18 +9,23 @@ JSDOC TYPINGS
  */
 
 /**
- * @typedef {'biquery' | 'athena' | 'snowflake' | 'azure' | 'salesforce'}  SupportedWarehouses the data warehouses supported by this module
+ * @typedef {'gcs' | 's3' | 'snowflake' | 'azure' }  SupportedStorage cloud storage environments supported
  */
 
 /**
- * @typedef {'event' | 'user' | 'group' | 'table'}  SupportedRecords types of records that can be ingested by mixpanel
+ * @typedef {'event' | 'user' | 'group' }  SupportedRecords types of records that can be ingested by mixpanel
+ */
+
+/**
+ * @typedef {'json' | 'ndjson' | 'jsonl' | 'csv' } SupportedFormats types of file formats that are supported
  */
 
 /**
  * @typedef Params a job configuration
- * @prop {SupportedWarehouses} dwh type of warehouse
- * @prop {Object} auth auth details for warehouse
- * @prop {string} sql SQL query to run in warehouse
+ * @prop {SupportedWarehouses} storage type of cloud storage
+ * @prop {Object} auth auth details to access storage
+ * @prop {string} path bucket URI to file or files, e.x. `gs://my-bucket/my-folder/myFile.ndjson` or `s3://my-bucket/*` 
+ * @prop {SupportedFormats} format
  * @prop {Mappings} mappings
  * @prop {Options} options
  * @prop {Mixpanel} mixpanel
@@ -30,24 +35,24 @@ JSDOC TYPINGS
 
 /**
  * @typedef Mappings mappings of dwh columns to mixpanel fields
- * @prop {string} [event_name_col] column for event name
- * @prop {string} [distinct_id_col] column for uniquer user id
- * @prop {string} [time_col] column for event time
- * @prop {string} [insert_id_col] column for row id (deduplication)
- * @prop {string} [name_col] the $name to use for the user/group profile
- * @prop {string} [email_col] the $email to use for the user/group profile
- * @prop {string} [avatar_col] a public link to an image to be used as an $avatar for the user/group profile
- * @prop {string} [created_col] the $created (timestamp) to use for the user/group profile
- * @prop {string} [phone_col] the $phone to use for the user/group profile
- * @prop {string} [latitude_col] the $latitude to use for the user/group profile; mixpanel will geo-resolve the profile when this value is supplied
- * @prop {string} [longitude_col] the $longitude to use for the user/group profile; mixpanel will geo-resolve the profile when this value is supplied
- * @prop {string} [ip_co] the $ip to use for the user/group profile; mixpanel will geo-resolve the profile when this value is supplied 
- * @prop {string} [profileOperation] the $set style operation to use for creating/updating the profile
- * @prop {string} [lookup_col] the "join" column for the lookup table; usually the first column in the table
+ * @prop {string} [distinct_id_col] column for uniquer user id 
+ * @prop {string} [event_name_col] column for event name  (event only)
+ * @prop {string} [time_col] column for event time  (event only)
+ * @prop {string} [insert_id_col] column for row id (deduplication) (event only)
+ * @prop {string} [name_col] the $name to use for the user/group profile (user + group only)
+ * @prop {string} [email_col] the $email to use for the user/group profile (user + group only)
+ * @prop {string} [avatar_col] a public link to an image to be used as an $avatar for the user/group profile (user + group only)
+ * @prop {string} [created_col] the $created (timestamp) to use for the user/group profile (user + group only)
+ * @prop {string} [phone_col] the $phone to use for the user/group profile (user + group only)
+ * @prop {string} [latitude_col] the $latitude to use for the user/group profile; mixpanel will geo-resolve the profile when this value is supplied (user + group only)
+ * @prop {string} [longitude_col] the $longitude to use for the user/group profile; mixpanel will geo-resolve the profile when this value is supplied (user + group only)
+ * @prop {string} [ip_co] the $ip to use for the user/group profile; mixpanel will geo-resolve the profile when this value is supplied (user + group only)
+ * @prop {string} [profileOperation] the $set style operation to use for creating/updating the profile (user + group only)
+ * @prop {string[]} [additional_time_cols] keys or column headers of columns that represent timestamps (other than event time)
  */
 
 /**
- * @typedef LocalOptions options to use for the job
+ * @typedef StorageOptions options to use for the job
  * @prop {string} logFile a local path to write log files to
  * @prop {boolean} verbose display verbose console output
  * @prop {boolean} strict use strict mode when sending data to mixpanel
@@ -57,7 +62,7 @@ JSDOC TYPINGS
  */
 
 /**
- * @typedef {LocalOptions & ImportOptions} Options
+ * @typedef {StorageOptions & ImportOptions} Options
  */
 
 /**

@@ -16,6 +16,7 @@ const require = createRequire(import.meta.url);
 
 // link to a config!
 let current = require("../environments/current.json");
+current.options.verbose = true;
 
 
 // do the thing!
@@ -27,8 +28,9 @@ main(current)
 	})
 	.catch(e => {
 		//noop
+		console.log(e.stack);
 		debugger;
-	}) 
+	});
 
 
 // main({

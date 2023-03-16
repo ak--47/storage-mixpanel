@@ -10,6 +10,8 @@ const timeout = 60000;
 
 const gcsNDJSONEvents = require("../environments/gcs/events-NDJSON.json");
 const gcsCSVEvents = require("../environments/gcs/events-CSV.json");
+const gcsJSONUsers = require('../environments/gcs/users-JSON.json');
+const gcsJSONGroups = require('../environments/gcs/groups-JSON.json');
 
 const opts = {
 	options: {
@@ -45,6 +47,28 @@ describe('gcs', () => {
 		expect(mixpanel.responses.length).toBe(11);
 		expect(mixpanel.errors.length).toBe(0);
 	}, timeout);
+
+	test('users JSON', async () => {
+		const data = await main(gcsJSONUsers);
+		const { mixpanel, gcs, time } = data;
+		expect(gcs.files.length).toBe(1);
+		expect(mixpanel.failed).toBe(0);
+		expect(mixpanel.success).toBe(10000);
+		expect(mixpanel.responses.length).toBe(5);
+		expect(mixpanel.errors.length).toBe(0);
+	}, timeout);
+
+	test('groups JSON', async () => {
+		const data = await main(gcsJSONGroups);
+		const { mixpanel, gcs, time } = data;
+		expect(gcs.files.length).toBe(1);
+		expect(mixpanel.failed).toBe(0);
+		expect(mixpanel.success).toBe(10000);
+		expect(mixpanel.responses.length).toBe(50);
+		expect(mixpanel.errors.length).toBe(0);
+	}, timeout);
+
+
 })
 
 

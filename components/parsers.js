@@ -1,10 +1,11 @@
 import papaparse from 'papaparse';
 
-export default function parser(type = "ndjson", data) {
-	if (type === 'ndjson') return parseJSONL(data);
-	if (type === 'jsonl') return parseJSONL(data);
-	if (type === 'json') return parseJSON(data);
-	if (type === 'csv') return parseCSV(data);
+export default function parser(type = "ndjson", data, fileName) {
+	if (type === 'ndjson' || fileName.endsWith('ndjson')) return parseJSONL(data);
+	if (type === 'jsonl' || fileName.endsWith('jsonl')) return parseJSONL(data);
+	if (type === 'json' || fileName.endsWith('json')) return parseJSON(data);
+	if (type === 'csv' || fileName.endsWith('csv')) return parseCSV(data);
+	if (type === 'tsv' || fileName.endsWith('tsv')) return parseCSV(data);
 	throw new Error(`${type} cannot be parsed; format not supported`);
 }
 

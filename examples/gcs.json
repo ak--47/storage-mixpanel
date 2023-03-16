@@ -1,0 +1,36 @@
+{
+	"storage": "gcs",
+	"auth": {
+		"type": "service_account",
+		"project_id": "my-project-id",
+		"private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n",
+		"client_email": "myServiceAccount@my-project-id.iam.gserviceaccount.com"		
+	},
+	"path": "gs://my-bucket/files/*",
+	"format": "ndjson",
+	"mappings": {
+		"event_name_col": "event_name",
+		"time_col": "event_time",
+		"distinct_id_col": "distinct_id",
+		"insert_id_col": "insert_id",
+		"additional_time_cols": ["user_visit_timestamp", "user_created_datetime"]
+	},
+	"options": {
+		"strict": true,
+		"compress": false,
+		"workers": 20,
+		"verbose": true,
+		"abridged": false,
+		"delete": false
+	},
+	"mixpanel": {
+		"type": "event",
+		"project_id": "my-mp-project",
+		"region": "US",
+		"api_secret": "my-api-secret"
+	},
+	"tags": {
+		"storage": "gcs",
+		"bucket": "my bucket"
+	}
+}

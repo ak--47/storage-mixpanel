@@ -26,7 +26,8 @@ const defaultImportOptions = {
 	compress: true,
 	verbose: true,
 	workers: 10,
-	deleteFiles: false
+	deleteFiles: false,
+	removeNulls: false
 
 
 };
@@ -208,9 +209,7 @@ export default class storageConfig {
 
 	//todo improve validation
 	validate() {
-		// lookup tables must have an id
-		if (this.type === 'table' && !this.mixpanel.lookupTableId) throw 'missing lookup table id';
-
+		if (!['event', 'user', 'group'].includes(this.type)) throw `unsupported type "${this.type}"... valid types are: "event", "user", or "group"... got "${this.type}"`;
 		// users + groups need a token
 		if (this.type === 'user' && !this.mixpanel.token) throw 'missing project token';
 		if (this.type === 'group' && !this.mixpanel.token) throw 'missing project token';
@@ -219,7 +218,7 @@ export default class storageConfig {
 		if (this.type === 'group' && !this.mixpanel.groupKey) throw 'missing group key';
 
 		//events + lookups need an API secret or service acct
-		if ((this.type === 'event' || this.type === 'table') && (!this.mixpanel.api_secret && !this.mixpanel.service_account)) throw 'missing API secret or service account';
+		if ((this.type === 'event') && (!this.mixpanel.api_secret && (!this.mixpanel.service_account || !this.mixpanel.service_secret))) throw 'missing API secret or service account';
 		return true;
 	}
 

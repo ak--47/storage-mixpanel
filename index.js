@@ -27,13 +27,12 @@ DEPS
 */
 
 import esMain from 'es-main';
-import cli from './components/cli.js';
+// import cli from './components/cli.js';
 import emitter from './components/emitter.js';
 import Config from "./components/config.js";
 import env from './components/env.js';
 import u from 'ak-tools';
 
-import mp from 'mixpanel-import';
 import { pEvent } from 'p-event';
 import { resolve } from 'path';
 import _ from "lodash";
@@ -49,11 +48,11 @@ PIPELINE
 */
 
 /**
- * stream a SQL query from your data warehouse into mixpanel!
+ * download flat files from cloud storage; transform and stream them to mixpanel!
  * @example
- * const results = await dwhMixpanel(params)
+ * const results = await storageMixpanel(params)
  * console.log(results.mixpanel) // { duration: 3461, success: 420, responses: [], errors: [] }
- * @param {Types.Params} params your streaming configuration
+ * @param {Types.Params} params your cloud storage + mixpanel
  * @returns {Promise<Types.Summary>} summary of the job containing metadata about time/throughput/responses
  */
 async function main(params) {
@@ -104,11 +103,10 @@ async function main(params) {
 	const mpStream = createStream(config);
 
 	//* STORAGE STREAM
-	let cloudStorage;
 	try {
 		switch (config.storage) {
 			case 'gcs':
-				cloudStorage = await gcs(config, mpStream);
+				await gcs(config, mpStream);
 				break;
 			default:
 				if (config.verbose) u.cLog(`i do not know how to access ${config.storage}... sorry`);
@@ -131,25 +129,16 @@ async function main(params) {
 		throw e;
 	}
 
-	// ? SPECIAL CASE: lookup tables cannot be streamed as batches
-	if (config.type === 'table') {
+
+	// * WAIT
+	try {
+		await pEvent(emitter, 'mp upload end');
 		mpStream.destroy();
-		emitter.emit('mp upload start', config);
-		const tableImport = await mp(config.mpAuth(), cloudStorage, { ...config.mpOpts(), logs: false });
-		config.store(tableImport, 'mp');
-		emitter.emit('mp upload end', config);
+	} catch (e) {
+		u.cLog(e, c.red('UNKNOWN FAILURE'), 'CRITICAL');
+		throw e;
 	}
 
-	else {
-		// * WAIT
-		try {
-			await pEvent(emitter, 'mp upload end');
-			mpStream.destroy();
-		} catch (e) {
-			u.cLog(e, c.red('UNKNOWN FAILURE'), 'CRITICAL');
-			throw e;
-		}
-	}
 
 
 	// * LOGS + CLEANUP

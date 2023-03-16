@@ -42,7 +42,7 @@
 		"highland": "^2.13.5",
 		"inquirer": "^9.1.4",
 		"lodash": "^4.17.21",
-		"mixpanel-import": "^2.2.53",
+		"mixpanel-import": "^2.2.55",
 		"p-event": "^5.0.1",
 		"papaparse": "^5.3.2",
 		"wildcard-match": "^5.1.2"
